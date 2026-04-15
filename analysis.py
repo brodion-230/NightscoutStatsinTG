@@ -45,11 +45,11 @@ def prepare_clean_frame(raw_data: Iterable[dict]) -> pd.DataFrame:
         return frame.assign(mmol=pd.Series(dtype='float64'))
 
     clean = frame.copy()
-    clean['noise'] = pd.to_numeric(clean['noise'], errors='coerce').fillna(999)
-    clean['sgv'] = pd.to_numeric(clean['sgv'], errors='coerce').fillna(0)
+    clean['noise'] = pd.to_numeric(clean['noise'], errors='coerce')
+    clean['sgv'] = pd.to_numeric(clean['sgv'], errors='coerce')
     clean['date'] = pd.to_numeric(clean['date'], errors='coerce')
 
-    clean = clean.dropna(subset=['date'])
+    clean = clean.dropna(subset=['noise', 'sgv', 'date'])
     clean = clean[(clean['noise'] < 5.0) & (clean['sgv'] > 0)]
     clean = clean.assign(
         date_ms=clean['date'].astype('int64'),

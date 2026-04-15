@@ -40,6 +40,11 @@ Set `TELEGRAM_BOT_TOKEN` in `.env`, then:
 python telegram_bot.py
 ```
 
+## Run tests
+```bash
+pytest -q
+```
+
 ## Notes
 - The bot is optional; the CLI works without Telegram settings.
 - `pandas` is used for cleaning, grouping, and summary calculations.
