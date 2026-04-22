@@ -4,11 +4,17 @@ from io import BytesIO
 from typing import Any
 
 try:
-    from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 except ImportError:
     ApplicationBuilder = None
     CommandHandler = None
+    CallbackQueryHandler = None
     ContextTypes = None
+    InlineKeyboardButton = None
+    InlineKeyboardMarkup = None
+    MessageHandler = None
+    filters = None
 
 from analysis import build_analysis_result, build_next_week_agp_forecast
 from charts import create_agp_figure, create_distribution_figure, create_forecast_agp_figure, figure_to_png_bytes
@@ -19,6 +25,7 @@ from periods import build_all_time_query, build_last_days_query, build_month_que
 
 HELP_TEXT = (
     'Available commands:\n'
+    '/start - Show main menu\n'
     '/last24 - last 24 hours\n'
     '/last7 - last 7 days\n'
     '/last30 - last 30 days\n'
@@ -29,7 +36,23 @@ HELP_TEXT = (
 
 
 def _message_or_none(update: Any):
+    if hasattr(update, 'callback_query') and update.callback_query:
+        return update.callback_query.message
     return getattr(update, 'message', None)
+
+
+def get_main_menu_keyboard():
+    if InlineKeyboardButton is None:
+        return None
+    keyboard = [
+        [InlineKeyboardButton("Last 24 hours", callback_data='last24')],
+        [InlineKeyboardButton("Last 7 days", callback_data='last7')],
+        [InlineKeyboardButton("Last 30 days", callback_data='last30')],
+        [InlineKeyboardButton("All-time statistics", callback_data='all')],
+        [InlineKeyboardButton("Forecast next 7 days", callback_data='forecast')],
+        [InlineKeyboardButton("Specific Month", callback_data='month_help')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 
 async def _send_report(update: Any, query, period_name: str, include_charts: bool = True):
@@ -76,7 +99,49 @@ async def _send_report(update: Any, query, period_name: str, include_charts: boo
 async def start_command(update: Any, context: Any):
     message = _message_or_none(update)
     if message is not None:
-        await message.reply_text('Nightscout statistics bot\n\n' + HELP_TEXT)
+        await message.reply_text(
+            'Nightscout statistics bot\n\nChoose an option below:',
+            reply_markup=get_main_menu_keyboard()
+        )
+
+
+async def button_handler(update: Any, context: Any):
+    query_cb = update.callback_query
+    await query_cb.answer()
+    
+    choice = query_cb.data
+    if choice == 'last24':
+        q, name = build_last_days_query(1)
+        await _send_report(update, q, name)
+    elif choice == 'last7':
+        q, name = build_last_days_query(7)
+        await _send_report(update, q, name)
+    elif choice == 'last30':
+        q, name = build_last_days_query(30)
+        await _send_report(update, q, name)
+    elif choice == 'all':
+        q, name = build_all_time_query()
+        await _send_report(update, q, name)
+    elif choice == 'forecast':
+        await forecast_command(update, context)
+    elif choice == 'month_help':
+        await query_cb.message.reply_text('To get stats for a specific month, just type the month and year (e.g., 04.2026)')
+
+
+async def handle_text(update: Any, context: Any):
+    message = _message_or_none(update)
+    if message is None or not message.text:
+        return
+
+    text = message.text.strip()
+    import re
+    if re.match(r'^\d{2}\.\d{4}$', text):
+        try:
+            query, name = build_month_query(text)
+        except Exception as exc:
+            await message.reply_text(f'Format error: {exc}')
+            return
+        await _send_report(update, query, name)
 
 
 async def last24_command(update: Any, context: Any):
@@ -172,6 +237,9 @@ def main() -> None:
     application.add_handler(CommandHandler('month', month_command))
     application.add_handler(CommandHandler('all', all_command))
     application.add_handler(CommandHandler('forecast', forecast_command))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    if MessageHandler is not None and filters is not None:
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     application.run_polling()
 
