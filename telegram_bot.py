@@ -123,7 +123,8 @@ async def forecast_command(update: Any, context: Any):
     if message is None:
         return
 
-    query, name = build_last_days_query(90)
+    query, _ = build_last_days_query(90)
+    name = 'Forecast Next 7 Days (90d base)'
     raw_data = load_raw_data(query)
     if not raw_data:
         await message.reply_text('No data found for last 90 days.')
@@ -142,9 +143,15 @@ async def forecast_command(update: Any, context: Any):
     fig = create_forecast_agp_figure(forecast_df)
     if fig is not None:
         png = figure_to_png_bytes(fig)
-        await message.reply_photo(photo=BytesIO(png), caption='Next 7 Days Forecast')
-    else:
-        await message.reply_text('Could not generate forecast chart.')
+        await message.reply_photo(photo=BytesIO(png), caption='Next 7 Days Forecast Trend')
+
+    agp_fig = create_agp_figure(result)
+    if agp_fig is not None:
+        agp_png = figure_to_png_bytes(agp_fig)
+        await message.reply_photo(photo=BytesIO(agp_png), caption='Forecast Daily Glucose Profile (AGP)')
+    
+    if fig is None and agp_fig is None:
+        await message.reply_text('Could not generate forecast charts.')
 
 
 def main() -> None:

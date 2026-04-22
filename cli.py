@@ -82,7 +82,8 @@ def main_menu():
         elif choice == '5':
             query, name = build_all_time_query()
         elif choice == '6':
-            query, name = build_last_days_query(90)
+            query, _ = build_last_days_query(90)
+            name = 'Forecast Next 7 Days (90d base)'
             raw_data = load_raw_data(query)
             if not raw_data:
                 print("\n[!] No data found for last 90 days.")
@@ -99,9 +100,12 @@ def main_menu():
                 continue
                 
             print(f"\nCreated forecast based on {result.clean_count} records from the last 90 days.")
-            if prompt_yes_no('\nOpen Forecast chart? (y/n): '):
+            if prompt_yes_no('\nOpen Forecast trend chart? (y/n): '):
                 fig = create_forecast_agp_figure(forecast_df)
                 show_figure(fig)
+            if prompt_yes_no('\nOpen Forecast Daily Glucose Profile (AGP)? (y/n): '):
+                agp_fig = create_agp_figure(result)
+                show_figure(agp_fig)
             continue
         elif choice == '0':
             print('Exiting...')
@@ -111,4 +115,3 @@ def main_menu():
             continue
 
         run_analysis(query, name)
-
