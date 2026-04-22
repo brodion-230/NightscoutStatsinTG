@@ -35,6 +35,34 @@ def test_create_distribution_figure_returns_none_for_empty_clean_frame():
     assert fig is None
 
 
+def test_create_forecast_agp_figure_returns_none_for_empty_frame():
+    from charts import create_forecast_agp_figure
+
+    fig = create_forecast_agp_figure(pd.DataFrame())
+    assert fig is None
+
+
+def test_create_forecast_agp_figure_returns_figure():
+    from charts import create_forecast_agp_figure
+    import datetime
+
+    now = datetime.datetime.now()
+    forecast_frame = pd.DataFrame(
+        {
+            'forecast_ts': [now, now + datetime.timedelta(hours=1)],
+            'p10': [4.0, 4.0],
+            'p25': [5.0, 5.0],
+            'p50': [6.0, 6.0],
+            'p75': [7.0, 7.0],
+            'p90': [8.0, 8.0],
+        }
+    )
+    fig = create_forecast_agp_figure(forecast_frame)
+    assert fig is not None
+    assert len(fig.axes) > 0
+    fig.clf()
+
+
 def test_create_agp_figure_contains_expected_title_and_lines():
     result = AnalysisResult(
         period_name='Last 14 days',
@@ -131,4 +159,3 @@ def test_show_figure_does_nothing_for_none():
         show_figure(None)
         show_mock.assert_not_called()
         close_mock.assert_not_called()
-

@@ -55,6 +55,37 @@ def create_distribution_figure(result: AnalysisResult):
     return fig
 
 
+def create_forecast_agp_figure(forecast_frame, period_name: str = "Next 7 days"):
+    if forecast_frame is None or forecast_frame.empty:
+        print('[!] Not enough data to draw forecast chart.')
+        return None
+
+    import matplotlib.dates as mdates
+    fig, ax = plt.subplots(figsize=(14, 6))
+    data = forecast_frame
+
+    ax.fill_between(data['forecast_ts'], data['p10'], data['p90'], color='purple', alpha=0.15, label='10%-90% percentile')
+    ax.fill_between(data['forecast_ts'], data['p25'], data['p75'], color='darkviolet', alpha=0.4, label='25%-75% percentile')
+    ax.plot(data['forecast_ts'], data['p50'], color='black', linewidth=2, label='Median Trend')
+
+    ax.axhline(10.0, color='goldenrod', linewidth=1.5, label='High (10.0)')
+    ax.axhline(3.9, color='red', linewidth=1.5, label='Low (3.9)')
+
+    ax.set_title(f'Glucose Trend Forecast ({period_name})', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Date / Time', fontsize=12)
+    ax.set_ylabel('Glucose (mmol/L)', fontsize=12)
+    
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d\n%H:00'))
+    ax.xaxis.set_major_locator(mdates.DayLocator())
+    ax.xaxis.set_minor_locator(mdates.HourLocator(byhour=[0, 6, 12, 18]))
+    
+    ax.set_ylim(0, 22)
+    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.legend(loc='upper right')
+    fig.tight_layout()
+    return fig
+
+
 def figure_to_png_bytes(fig) -> bytes:
     buffer = BytesIO()
     fig.savefig(buffer, format='png', bbox_inches='tight')

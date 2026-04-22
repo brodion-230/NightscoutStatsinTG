@@ -115,6 +115,73 @@ def build_agp_frame(clean_frame: pd.DataFrame, min_bucket_size: int = 6) -> pd.D
     return agp
 
 
+def build_next_week_agp_forecast(clean_frame: pd.DataFrame, min_bucket_size: int = 6) -> pd.DataFrame:
+    cols = ['forecast_ts', 'p10', 'p25', 'p50', 'p75', 'p90']
+    if clean_frame.empty or 'timestamp' not in clean_frame.columns:
+        return pd.DataFrame(columns=cols)
+
+    working = clean_frame[['timestamp', 'hour_decimal', 'mmol']].dropna().copy()
+    if working.empty:
+        return pd.DataFrame(columns=cols)
+
+    working['weekday'] = working['timestamp'].dt.weekday
+    working['time_center'] = np.floor(working['hour_decimal'] * 2) / 2 + 0.25
+
+    def safe_percentile(s, p):
+        return float(np.percentile(s, p)) if len(s) >= min_bucket_size else np.nan
+
+    global_agp = working.groupby('time_center')['mmol'].agg(
+        p10=lambda s: safe_percentile(s, 10),
+        p25=lambda s: safe_percentile(s, 25),
+        p50=lambda s: safe_percentile(s, 50),
+        p75=lambda s: safe_percentile(s, 75),
+        p90=lambda s: safe_percentile(s, 90),
+    ).reset_index()
+
+    wd_agp = working.groupby(['weekday', 'time_center'])['mmol'].agg(
+        count='count',
+        p10=lambda s: float(np.percentile(s, 10)),
+        p25=lambda s: float(np.percentile(s, 25)),
+        p50=lambda s: float(np.percentile(s, 50)),
+        p75=lambda s: float(np.percentile(s, 75)),
+        p90=lambda s: float(np.percentile(s, 90)),
+    ).reset_index()
+
+    last_ts = working['timestamp'].max()
+    start_ts = last_ts.replace(hour=0, minute=0, second=0, microsecond=0) + pd.Timedelta(days=1)
+
+    rows = []
+    for day_offset in range(7):
+        target_date = start_ts + pd.Timedelta(days=day_offset)
+        target_wd = target_date.weekday()
+        for h in range(48):
+            tc = h / 2 + 0.25
+            forecast_ts = target_date + pd.Timedelta(hours=h / 2)
+            
+            match = wd_agp[(wd_agp['weekday'] == target_wd) & (wd_agp['time_center'] == tc)]
+            if not match.empty and match.iloc[0]['count'] >= min_bucket_size:
+                r = match.iloc[0]
+                rows.append({
+                    'forecast_ts': forecast_ts,
+                    'p10': r['p10'], 'p25': r['p25'], 'p50': r['p50'], 'p75': r['p75'], 'p90': r['p90']
+                })
+            else:
+                gm = global_agp[global_agp['time_center'] == tc]
+                if not gm.empty and pd.notna(gm.iloc[0]['p50']):
+                    r = gm.iloc[0]
+                    rows.append({
+                        'forecast_ts': forecast_ts,
+                        'p10': r['p10'], 'p25': r['p25'], 'p50': r['p50'], 'p75': r['p75'], 'p90': r['p90']
+                    })
+                else:
+                    rows.append({
+                        'forecast_ts': forecast_ts,
+                        'p10': np.nan, 'p25': np.nan, 'p50': np.nan, 'p75': np.nan, 'p90': np.nan
+                    })
+
+    return pd.DataFrame(rows).dropna().reset_index(drop=True)
+
+
 def build_analysis_result(raw_data: Iterable[dict], period_name: str) -> AnalysisResult:
     raw_list = list(raw_data)
     clean_frame = prepare_clean_frame(raw_list)
@@ -132,5 +199,4 @@ def build_analysis_result(raw_data: Iterable[dict], period_name: str) -> Analysi
         segment_table=segment_table,
         agp_frame=agp_frame,
     )
-
 

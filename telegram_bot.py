@@ -10,8 +10,8 @@ except ImportError:
     CommandHandler = None
     ContextTypes = None
 
-from analysis import build_analysis_result
-from charts import create_agp_figure, create_distribution_figure, figure_to_png_bytes
+from analysis import build_analysis_result, build_next_week_agp_forecast
+from charts import create_agp_figure, create_distribution_figure, create_forecast_agp_figure, figure_to_png_bytes
 from config import load_config
 from db import load_raw_data
 from periods import build_all_time_query, build_last_days_query, build_month_query
@@ -23,7 +23,8 @@ HELP_TEXT = (
     '/last7 - last 7 days\n'
     '/last30 - last 30 days\n'
     '/month MM.YYYY - select month\n'
-    '/all - all-time statistics'
+    '/all - all-time statistics\n'
+    '/forecast - Predict next 7 days based on past 3 months'
 )
 
 
@@ -117,6 +118,35 @@ async def month_command(update: Any, context: Any):
     await _send_report(update, query, name)
 
 
+async def forecast_command(update: Any, context: Any):
+    message = _message_or_none(update)
+    if message is None:
+        return
+
+    query, name = build_last_days_query(90)
+    raw_data = load_raw_data(query)
+    if not raw_data:
+        await message.reply_text('No data found for last 90 days.')
+        return
+
+    result = build_analysis_result(raw_data, name)
+    if result.clean_count == 0:
+        await message.reply_text('No clean records for last 90 days.')
+        return
+
+    forecast_df = build_next_week_agp_forecast(result.clean_frame)
+    if forecast_df.empty:
+        await message.reply_text('Not enough data to calculate forecast.')
+        return
+
+    fig = create_forecast_agp_figure(forecast_df)
+    if fig is not None:
+        png = figure_to_png_bytes(fig)
+        await message.reply_photo(photo=BytesIO(png), caption='Next 7 Days Forecast')
+    else:
+        await message.reply_text('Could not generate forecast chart.')
+
+
 def main() -> None:
     if ApplicationBuilder is None or CommandHandler is None:
         raise RuntimeError(
@@ -134,11 +164,11 @@ def main() -> None:
     application.add_handler(CommandHandler('last30', last30_command))
     application.add_handler(CommandHandler('month', month_command))
     application.add_handler(CommandHandler('all', all_command))
+    application.add_handler(CommandHandler('forecast', forecast_command))
 
     application.run_polling()
 
 
 if __name__ == '__main__':
     main()
-
 
