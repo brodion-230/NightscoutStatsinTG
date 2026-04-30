@@ -55,6 +55,16 @@ def get_main_menu_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 
+def get_forecast_options_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton("Just last 3 weeks", callback_data='forecast_exec_0')],
+        [InlineKeyboardButton("Past 1 year (same period)", callback_data='forecast_exec_1')],
+        [InlineKeyboardButton("Past 2 years (same period)", callback_data='forecast_exec_2')],
+        [InlineKeyboardButton("Past 3 years (same period)", callback_data='forecast_exec_3')],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
 async def _send_report(update: Any, query, period_name: str, include_charts: bool = True):
     message = _message_or_none(update)
     if message is None:
@@ -123,9 +133,35 @@ async def button_handler(update: Any, context: Any):
         q, name = build_all_time_query()
         await _send_report(update, q, name)
     elif choice == 'forecast':
-        await forecast_command(update, context)
+        await query_cb.message.reply_text('Choose dataset timeframe for forecast:', reply_markup=get_forecast_options_keyboard())
+    elif choice.startswith('forecast_exec_'):
+        years_back = int(choice.split('_')[-1])
+        await execute_forecast(update, years_back)
     elif choice == 'month_help':
         await query_cb.message.reply_text('To get stats for a specific month, just type the month and year (e.g., 04.2026)')
+
+
+async def execute_forecast(update: Any, years_back: int):
+    message = _message_or_none(update)
+    if message is None:
+        return
+
+    await message.reply_text(f'Loading data (years back: {years_back}) and generating 3-day forecast using Gaussian Process...')
+    
+    now_ms = int(time.time() * 1000)
+    
+    raw_data = load_historical_periods(now_ms, window_days=21, years_back=years_back)
+    if not raw_data:
+        await message.reply_text(f'No historical data found for the past {years_back} years.')
+        return
+
+    forecast_df = generate_3day_forecast(raw_data, now_ms)
+    if forecast_df is None or forecast_df.empty:
+        await message.reply_text('Failed to generate forecast (not enough clean records).')
+        return
+        
+    png_bytes = create_forecast_chart(forecast_df)
+    await message.reply_photo(photo=BytesIO(png_bytes), caption=f'3-Day Glucose Forecast (Gaussian Process, Dataset: {years_back} years back)')
 
 
 async def handle_text(update: Any, context: Any):
@@ -187,23 +223,8 @@ async def forecast_command(update: Any, context: Any):
     message = _message_or_none(update)
     if message is None:
         return
+    await message.reply_text('Choose dataset timeframe for forecast:', reply_markup=get_forecast_options_keyboard())
 
-    await message.reply_text('Loading historical data and generating 3-day forecast using Gaussian Process (this may take a few moments)...')
-    
-    now_ms = int(time.time() * 1000)
-    
-    raw_data = load_historical_periods(now_ms, window_days=21, years_back=2)
-    if not raw_data:
-        await message.reply_text('No historical data found for the past 2 years.')
-        return
-
-    forecast_df = generate_3day_forecast(raw_data, now_ms)
-    if forecast_df is None or forecast_df.empty:
-        await message.reply_text('Failed to generate forecast (not enough clean records).')
-        return
-        
-    png_bytes = create_forecast_chart(forecast_df)
-    await message.reply_photo(photo=BytesIO(png_bytes), caption='3-Day Glucose Forecast (Gaussian Process)')
 
 def main() -> None:
     if ApplicationBuilder is None or CommandHandler is None:
