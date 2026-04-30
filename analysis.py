@@ -197,27 +197,62 @@ def generate_3day_forecast(raw_data: Iterable[dict], now_ms: int) -> pd.DataFram
 
     working['hour_decimal'] = working['timestamp'].dt.hour + working['timestamp'].dt.minute / 60.0
 
-    if len(working) > 1000:
-        working = working.sample(1000, random_state=42)
+    if len(working) > 2000:
+        working = working.sample(2000, random_state=42)
 
-    X = working[['hour_decimal']].values
+    start_ts_num = float(working['timestamp'].min().value) / 10**9
+    time_continuous = (working['timestamp'].values.astype(np.int64) / 10**9 - start_ts_num) / 3600.0
+    hour_series = working['hour_decimal'].values
+
+    X = np.column_stack([
+        time_continuous,
+        np.sin(2 * np.pi * hour_series / 24),
+        np.cos(2 * np.pi * hour_series / 24),
+        np.sin(4 * np.pi * hour_series / 24),
+        np.cos(4 * np.pi * hour_series / 24),
+        np.sin(6 * np.pi * hour_series / 24),
+        np.cos(6 * np.pi * hour_series / 24),
+        np.sin(8 * np.pi * hour_series / 24),
+        np.cos(8 * np.pi * hour_series / 24),
+        np.sin(12 * np.pi * hour_series / 24),
+        np.cos(12 * np.pi * hour_series / 24),
+        np.sin(24 * np.pi * hour_series / 24),
+        np.cos(24 * np.pi * hour_series / 24)
+    ])
     y = working['mmol'].values
 
-    model = make_pipeline(PolynomialFeatures(degree=5), LinearRegression())
+    model = make_pipeline(PolynomialFeatures(degree=5, include_bias=False), LinearRegression())
     model.fit(X, y)
     
     y_pred_all = model.predict(X)
-    std_dev = np.std(y - y_pred_all)
-    safe_std = float(max(std_dev, 0.1))
+    
+    residuals = y - y_pred_all
+    safe_std = float(max(np.std(residuals), 0.5))
 
     start_ts = pd.to_datetime(now_ms, unit='ms')
     rows = []
 
-    for h in range(72 * 2): # Halves of hour
-        target_ts = start_ts + pd.Timedelta(hours=h/2.0)
+    for h in range(72 * 10): # Tenths of hour (every 6 minutes)
+        target_ts = start_ts + pd.Timedelta(hours=h/10.0)
         td_hour = target_ts.hour + target_ts.minute / 60.0
+        tc_h = (float(target_ts.value) / 10**9 - start_ts_num) / 3600.0
 
-        y_mean = float(model.predict([[td_hour]])[0])
+        x_pred = np.array([[
+            tc_h,
+            np.sin(2 * np.pi * td_hour / 24),
+            np.cos(2 * np.pi * td_hour / 24),
+            np.sin(4 * np.pi * td_hour / 24),
+            np.cos(4 * np.pi * td_hour / 24),
+            np.sin(6 * np.pi * td_hour / 24),
+            np.cos(6 * np.pi * td_hour / 24),
+            np.sin(8 * np.pi * td_hour / 24),
+            np.cos(8 * np.pi * td_hour / 24),
+            np.sin(12 * np.pi * td_hour / 24),
+            np.cos(12 * np.pi * td_hour / 24),
+            np.sin(24 * np.pi * td_hour / 24),
+            np.cos(24 * np.pi * td_hour / 24)
+        ]])
+        y_mean = float(model.predict(x_pred)[0])
 
         dist = norm(loc=y_mean, scale=safe_std)
 
