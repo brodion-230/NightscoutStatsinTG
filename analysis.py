@@ -6,8 +6,9 @@ from typing import Iterable, Optional
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, WhiteKernel
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
 
 SEGMENT_DEFINITIONS = [
     ('Very Low (< 3.0)', lambda s: s < 3.0),
@@ -202,9 +203,12 @@ def generate_3day_forecast(raw_data: Iterable[dict], now_ms: int) -> pd.DataFram
     X = working[['hour_decimal']].values
     y = working['mmol'].values
 
-    kernel = RBF(length_scale=1.0) + WhiteKernel(noise_level=1.0)
-    gpr = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=0, random_state=0)
-    gpr.fit(X, y)
+    model = make_pipeline(PolynomialFeatures(degree=5), LinearRegression())
+    model.fit(X, y)
+    
+    y_pred_all = model.predict(X)
+    std_dev = np.std(y - y_pred_all)
+    safe_std = float(max(std_dev, 0.1))
 
     start_ts = pd.to_datetime(now_ms, unit='ms')
     rows = []
@@ -213,9 +217,9 @@ def generate_3day_forecast(raw_data: Iterable[dict], now_ms: int) -> pd.DataFram
         target_ts = start_ts + pd.Timedelta(hours=h/2.0)
         td_hour = target_ts.hour + target_ts.minute / 60.0
 
-        y_mean, y_std = gpr.predict([[td_hour]], return_std=True)
+        y_mean = float(model.predict([[td_hour]])[0])
 
-        dist = norm(loc=y_mean[0], scale=y_std[0] + 0.1)
+        dist = norm(loc=y_mean, scale=safe_std)
 
         rows.append({
             'timestamp': target_ts,
@@ -246,4 +250,3 @@ def build_analysis_result(raw_data: Iterable[dict], period_name: str) -> Analysi
         segment_table=segment_table,
         agp_frame=agp_frame,
     )
-

@@ -146,8 +146,8 @@ async def execute_forecast(update: Any, years_back: int):
     if message is None:
         return
 
-    await message.reply_text(f'Loading data (years back: {years_back}) and generating 3-day forecast using Gaussian Process...')
-    
+    await message.reply_text(f'Loading data (years back: {years_back}) and generating 3-day forecast using Linear Regression...')
+
     now_ms = int(time.time() * 1000)
     
     raw_data = load_historical_periods(now_ms, window_days=21, years_back=years_back)
@@ -161,7 +161,7 @@ async def execute_forecast(update: Any, years_back: int):
         return
         
     png_bytes = create_forecast_chart(forecast_df)
-    await message.reply_photo(photo=BytesIO(png_bytes), caption=f'3-Day Glucose Forecast (Gaussian Process, Dataset: {years_back} years back)')
+    await message.reply_photo(photo=BytesIO(png_bytes), caption=f'3-Day Glucose Forecast (Linear Regression, Dataset: {years_back} years back)')
 
 
 async def handle_text(update: Any, context: Any):

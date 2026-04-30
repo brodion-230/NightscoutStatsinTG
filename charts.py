@@ -109,7 +109,7 @@ def create_forecast_chart(forecast_df: pd.DataFrame) -> bytes:
     ax.fill_between(x, forecast_df['p25'], forecast_df['p75'], color='blue', alpha=0.3, label='25%-75%')
     ax.plot(x, forecast_df['p50'], color='darkblue', linewidth=2, label='Median (p50)')
     
-    ax.set_title("3-Day Glucose Forecast (Gaussian Process)")
+    ax.set_title("3-Day Glucose Forecast (Linear Regression)")
     ax.set_ylabel("Glucose (mmol/L)")
     ax.grid(True)
     ax.legend(loc='upper right')
