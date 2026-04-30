@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from io import BytesIO
+import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 from analysis import AnalysisResult
 
@@ -60,7 +62,6 @@ def create_forecast_agp_figure(forecast_frame, period_name: str = "Next 7 days")
         print('[!] Not enough data to draw forecast chart.')
         return None
 
-    import matplotlib.dates as mdates
     fig, ax = plt.subplots(figsize=(14, 6))
     data = forecast_frame
 
@@ -99,3 +100,46 @@ def show_figure(fig) -> None:
         plt.close(fig)
 
 
+def create_forecast_chart(forecast_df: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(10, 5))
+    
+    x = forecast_df['timestamp']
+    
+    ax.fill_between(x, forecast_df['p10'], forecast_df['p90'], color='blue', alpha=0.1, label='10%-90%')
+    ax.fill_between(x, forecast_df['p25'], forecast_df['p75'], color='blue', alpha=0.3, label='25%-75%')
+    ax.plot(x, forecast_df['p50'], color='darkblue', linewidth=2, label='Median (p50)')
+    
+    ax.set_title("3-Day Glucose Forecast (Gaussian Process)")
+    ax.set_ylabel("Glucose (mmol/L)")
+    ax.grid(True)
+    ax.legend(loc='upper right')
+    fig.autofmt_xdate()
+    
+    buf = BytesIO()
+    fig.tight_layout()
+    fig.savefig(buf, format='png')
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def create_next_week_forecast_agp_figure(forecast_df: pd.DataFrame, title: str = "7-Day Forecast") -> bytes:
+    fig, ax = plt.subplots(figsize=(10, 5))
+    
+    x = forecast_df['timestamp']
+    
+    ax.fill_between(x, forecast_df['p10'], forecast_df['p90'], color='blue', alpha=0.1, label='10%-90%')
+    ax.fill_between(x, forecast_df['p25'], forecast_df['p75'], color='blue', alpha=0.3, label='25%-75%')
+    ax.plot(x, forecast_df['p50'], color='darkblue', linewidth=2, label='Median (p50)')
+    
+    ax.set_title(title, pad=20)
+    ax.set_xlabel('Time of Day')
+    ax.set_ylabel('Glucose (mmol/L)')
+    ax.grid(True)
+    ax.legend(loc='upper right')
+    fig.autofmt_xdate()
+    
+    buf = BytesIO()
+    fig.tight_layout()
+    fig.savefig(buf, format='png')
+    plt.close(fig)
+    return buf.getvalue()

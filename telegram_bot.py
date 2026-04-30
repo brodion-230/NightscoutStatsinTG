@@ -16,12 +16,12 @@ except ImportError:
     MessageHandler = None
     filters = None
 
-from analysis import build_analysis_result, build_next_week_agp_forecast
-from charts import create_agp_figure, create_distribution_figure, create_forecast_agp_figure, figure_to_png_bytes
+from analysis import build_analysis_result, build_next_week_agp_forecast, generate_3day_forecast
+from charts import create_agp_figure, create_distribution_figure, create_forecast_agp_figure, create_forecast_chart, figure_to_png_bytes
 from config import load_config
-from db import load_raw_data
+from db import load_raw_data, load_historical_periods
 from periods import build_all_time_query, build_last_days_query, build_month_query
-
+import time
 
 HELP_TEXT = (
     'Available commands:\n'
@@ -31,7 +31,7 @@ HELP_TEXT = (
     '/last30 - last 30 days\n'
     '/month MM.YYYY - select month\n'
     '/all - all-time statistics\n'
-    '/forecast - Predict next 7 days based on past 3 months'
+    '/forecast - Predict next 3 days based on past 3 years'
 )
 
 
@@ -49,7 +49,7 @@ def get_main_menu_keyboard():
         [InlineKeyboardButton("Last 7 days", callback_data='last7')],
         [InlineKeyboardButton("Last 30 days", callback_data='last30')],
         [InlineKeyboardButton("All-time statistics", callback_data='all')],
-        [InlineKeyboardButton("Forecast next 7 days", callback_data='forecast')],
+        [InlineKeyboardButton("Forecast next 3 days", callback_data='forecast')],
         [InlineKeyboardButton("Specific Month", callback_data='month_help')]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -188,36 +188,22 @@ async def forecast_command(update: Any, context: Any):
     if message is None:
         return
 
-    query, _ = build_last_days_query(90)
-    name = 'Forecast Next 7 Days (90d base)'
-    raw_data = load_raw_data(query)
-    if not raw_data:
-        await message.reply_text('No data found for last 90 days.')
-        return
-
-    result = build_analysis_result(raw_data, name)
-    if result.clean_count == 0:
-        await message.reply_text('No clean records for last 90 days.')
-        return
-
-    forecast_df = build_next_week_agp_forecast(result.clean_frame)
-    if forecast_df.empty:
-        await message.reply_text('Not enough data to calculate forecast.')
-        return
-
-    fig = create_forecast_agp_figure(forecast_df)
-    if fig is not None:
-        png = figure_to_png_bytes(fig)
-        await message.reply_photo(photo=BytesIO(png), caption='Next 7 Days Forecast Trend')
-
-    agp_fig = create_agp_figure(result)
-    if agp_fig is not None:
-        agp_png = figure_to_png_bytes(agp_fig)
-        await message.reply_photo(photo=BytesIO(agp_png), caption='Forecast Daily Glucose Profile (AGP)')
+    await message.reply_text('Loading historical data and generating 3-day forecast using Gaussian Process (this may take a few moments)...')
     
-    if fig is None and agp_fig is None:
-        await message.reply_text('Could not generate forecast charts.')
+    now_ms = int(time.time() * 1000)
+    
+    raw_data = load_historical_periods(now_ms, window_days=21, years_back=3)
+    if not raw_data:
+        await message.reply_text('No historical data found for the past 3 years.')
+        return
 
+    forecast_df = generate_3day_forecast(raw_data, now_ms)
+    if forecast_df is None or forecast_df.empty:
+        await message.reply_text('Failed to generate forecast (not enough clean records).')
+        return
+        
+    png_bytes = create_forecast_chart(forecast_df)
+    await message.reply_photo(photo=BytesIO(png_bytes), caption='3-Day Glucose Forecast (Gaussian Process)')
 
 def main() -> None:
     if ApplicationBuilder is None or CommandHandler is None:
