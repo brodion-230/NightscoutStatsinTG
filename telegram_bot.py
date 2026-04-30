@@ -192,9 +192,9 @@ async def forecast_command(update: Any, context: Any):
     
     now_ms = int(time.time() * 1000)
     
-    raw_data = load_historical_periods(now_ms, window_days=21, years_back=3)
+    raw_data = load_historical_periods(now_ms, window_days=21, years_back=2)
     if not raw_data:
-        await message.reply_text('No historical data found for the past 3 years.')
+        await message.reply_text('No historical data found for the past 2 years.')
         return
 
     forecast_df = generate_3day_forecast(raw_data, now_ms)
