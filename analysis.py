@@ -5,7 +5,10 @@ from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
-
+from scipy.stats import norm
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
 
 SEGMENT_DEFINITIONS = [
     ('Very Low (< 3.0)', lambda s: s < 3.0),
@@ -118,6 +121,89 @@ def build_agp_frame(clean_frame: pd.DataFrame, min_bucket_size: int = 6) -> pd.D
 # Forecast/prediction functionality removed per request.
 
 
+def generate_3day_forecast(raw_data: Iterable[dict], now_ms: int) -> pd.DataFrame:
+    clean_frame = prepare_clean_frame(list(raw_data))
+    cols = ['timestamp', 'p10', 'p25', 'p50', 'p75', 'p90']
+    if clean_frame.empty:
+        return pd.DataFrame(columns=cols)
+
+    working = clean_frame[['timestamp', 'mmol']].dropna().copy()
+    if working.empty:
+        return pd.DataFrame(columns=cols)
+
+    working['hour_decimal'] = working['timestamp'].dt.hour + working['timestamp'].dt.minute / 60.0
+
+    if len(working) > 2000:
+        working = working.sample(2000, random_state=42)
+
+    start_ts_num = float(working['timestamp'].min().value) / 10**9
+    time_continuous = (working['timestamp'].values.astype(np.int64) / 10**9 - start_ts_num) / 3600.0
+    hour_series = working['hour_decimal'].values
+
+    X = np.column_stack([
+        time_continuous,
+        np.sin(2 * np.pi * hour_series / 24),
+        np.cos(2 * np.pi * hour_series / 24),
+        np.sin(4 * np.pi * hour_series / 24),
+        np.cos(4 * np.pi * hour_series / 24),
+        np.sin(6 * np.pi * hour_series / 24),
+        np.cos(6 * np.pi * hour_series / 24),
+        np.sin(8 * np.pi * hour_series / 24),
+        np.cos(8 * np.pi * hour_series / 24),
+        np.sin(12 * np.pi * hour_series / 24),
+        np.cos(12 * np.pi * hour_series / 24),
+        np.sin(24 * np.pi * hour_series / 24),
+        np.cos(24 * np.pi * hour_series / 24)
+    ])
+    y = working['mmol'].values
+
+    model = make_pipeline(PolynomialFeatures(degree=5, include_bias=False), LinearRegression())
+    model.fit(X, y)
+    
+    y_pred_all = model.predict(X)
+    
+    residuals = y - y_pred_all
+    safe_std = float(max(np.std(residuals), 0.5))
+
+    start_ts = pd.to_datetime(now_ms, unit='ms')
+    rows = []
+
+    for h in range(72 * 10): # Tenths of hour (every 6 minutes)
+        target_ts = start_ts + pd.Timedelta(hours=h/10.0)
+        td_hour = target_ts.hour + target_ts.minute / 60.0
+        tc_h = (float(target_ts.value) / 10**9 - start_ts_num) / 3600.0
+
+        x_pred = np.array([[
+            tc_h,
+            np.sin(2 * np.pi * td_hour / 24),
+            np.cos(2 * np.pi * td_hour / 24),
+            np.sin(4 * np.pi * td_hour / 24),
+            np.cos(4 * np.pi * td_hour / 24),
+            np.sin(6 * np.pi * td_hour / 24),
+            np.cos(6 * np.pi * td_hour / 24),
+            np.sin(8 * np.pi * td_hour / 24),
+            np.cos(8 * np.pi * td_hour / 24),
+            np.sin(12 * np.pi * td_hour / 24),
+            np.cos(12 * np.pi * td_hour / 24),
+            np.sin(24 * np.pi * td_hour / 24),
+            np.cos(24 * np.pi * td_hour / 24)
+        ]])
+        y_mean = float(model.predict(x_pred)[0])
+
+        dist = norm(loc=y_mean, scale=safe_std)
+
+        rows.append({
+            'timestamp': target_ts,
+            'p10': float(dist.ppf(0.10)),
+            'p25': float(dist.ppf(0.25)),
+            'p50': float(dist.ppf(0.50)),
+            'p75': float(dist.ppf(0.75)),
+            'p90': float(dist.ppf(0.90)),
+        })
+
+    return pd.DataFrame(rows)
+
+
 def build_analysis_result(raw_data: Iterable[dict], period_name: str) -> AnalysisResult:
     raw_list = list(raw_data)
     clean_frame = prepare_clean_frame(raw_list)
@@ -135,4 +221,3 @@ def build_analysis_result(raw_data: Iterable[dict], period_name: str) -> Analysi
         segment_table=segment_table,
         agp_frame=agp_frame,
     )
-
