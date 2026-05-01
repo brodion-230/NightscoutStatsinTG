@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import sys
 
-from analysis import AnalysisResult, build_analysis_result, build_next_week_agp_forecast
-from charts import create_agp_figure, create_distribution_figure, create_forecast_agp_figure, show_figure
+from analysis import AnalysisResult, build_analysis_result
+from charts import create_agp_figure, create_distribution_figure, show_figure
 from db import load_raw_data
 from periods import build_all_time_query, build_last_days_query, build_month_query
 
@@ -61,7 +61,6 @@ def main_menu():
         print('3. Last 30 days')
         print('4. Select specific month (MM.YYYY)')
         print('5. All-time statistics')
-        print('6. Forecast next 7 days (based on last 3 months)')
         print('0. Exit')
 
         choice = input('\nChoose an option: ').strip()
@@ -81,32 +80,6 @@ def main_menu():
                 continue
         elif choice == '5':
             query, name = build_all_time_query()
-        elif choice == '6':
-            query, _ = build_last_days_query(90)
-            name = 'Forecast Next 7 Days (90d base)'
-            raw_data = load_raw_data(query)
-            if not raw_data:
-                print("\n[!] No data found for last 90 days.")
-                continue
-            
-            result = build_analysis_result(raw_data, name)
-            if result.clean_count == 0:
-                print("\n[!] No clean records for last 90 days.")
-                continue
-            
-            forecast_df = build_next_week_agp_forecast(result.clean_frame)
-            if forecast_df.empty:
-                print("\n[!] Not enough data for forecast.")
-                continue
-                
-            print(f"\nCreated forecast based on {result.clean_count} records from the last 90 days.")
-            if prompt_yes_no('\nOpen Forecast trend chart? (y/n): '):
-                fig = create_forecast_agp_figure(forecast_df)
-                show_figure(fig)
-            if prompt_yes_no('\nOpen Forecast Daily Glucose Profile (AGP)? (y/n): '):
-                agp_fig = create_agp_figure(result)
-                show_figure(agp_fig)
-            continue
         elif choice == '0':
             print('Exiting...')
             sys.exit()

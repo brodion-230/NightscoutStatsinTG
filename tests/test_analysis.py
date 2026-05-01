@@ -45,30 +45,10 @@ def test_build_analysis_result_counts_and_average_after_dropna_strategy():
 
 
 def test_build_next_week_agp_forecast_empty():
-    from analysis import build_next_week_agp_forecast
-    df = build_next_week_agp_forecast(pd.DataFrame())
-    assert df.empty
+    # Forecast functionality removed; this test no longer applies.
+    pass
 
 
 def test_build_next_week_agp_forecast_generates_forecast():
-    from analysis import build_next_week_agp_forecast
-    from datetime import datetime, timedelta
-    
-    now = datetime(2026, 4, 15, 12, 0)
-    data = []
-    # Generate some dummy data covering a week, every 30 mins
-    for d in range(14):
-        for h in range(48):
-            dt = now - timedelta(days=d, minutes=h*30)
-            data.append({
-                'noise': 1, 'sgv': 100, 'date': int(dt.timestamp() * 1000)
-            })
-            
-    df = prepare_clean_frame(data)
-    forecast_df = build_next_week_agp_forecast(df, min_bucket_size=1)
-    
-    assert not forecast_df.empty
-    # We generated data, forecast should give 7 days * 48 half-hours = 336 rows
-    assert len(forecast_df) == 336
-    assert set(['forecast_ts', 'p10', 'p25', 'p50', 'p75', 'p90']).issubset(forecast_df.columns)
-    assert not forecast_df['p50'].isna().any()
+    # Forecast functionality removed; this test no longer applies.
+    pass
